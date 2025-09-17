@@ -603,35 +603,62 @@ function getDateRange(intervals) {
 function createPieChart(intervals) {
   if (!intervals.length) return;
   
-  // Calcular tiempo total por estado
+  // Función para detectar gaps entre intervalos
+  function detectGaps(intervals) {
+    const gaps = [];
+    for (let i = 1; i < intervals.length; i++) {
+      const prevEnd = intervals[i-1].end.getTime();
+      const currentStart = intervals[i].start.getTime();
+      const gapDuration = currentStart - prevEnd;
+      
+      // Solo gaps ≥ 5 minutos son significativos
+      if (gapDuration >= 5 * 60 * 1000) {
+        gaps.push({
+          start: prevEnd,
+          end: currentStart,
+          duration: gapDuration
+        });
+      }
+    }
+    return gaps;
+  }
+  
+  // Calcular tiempo total por estado, excluyendo gaps
   const stateData = {};
   const stateDurations = {};
   let totalTime = 0;
+  let totalGapTime = 0;
   
-  intervals.forEach(interval => {
-    // Calcular duración visual en minutos
-    const startHour = interval.start.getHours();
-    const startMin = interval.start.getMinutes();
-    const endHour = interval.end.getHours();
-    const endMin = interval.end.getMinutes();
+  // Detectar gaps entre intervalos
+  const gaps = detectGaps(intervals);
+  
+  intervals.forEach((interval, index) => {
+    // Calcular duración real del intervalo
+    let intervalDuration = interval.end.getTime() - interval.start.getTime();
     
-    const startTotalMin = startHour * 60 + startMin;
-    const endTotalMin = endHour * 60 + endMin;
-    
-    let diffMin = endTotalMin - startTotalMin;
-    if (diffMin < 0) {
-      diffMin += 24 * 60;
+    // Verificar si hay un gap después de este intervalo
+    const nextInterval = intervals[index + 1];
+    if (nextInterval) {
+      const gapAfter = nextInterval.start.getTime() - interval.end.getTime();
+      if (gapAfter > 5 * 60 * 1000) {
+        // Hay un gap significativo después de este intervalo
+        console.log(`Gap detectado después del intervalo ${index}: ${(gapAfter / (1000 * 60)).toFixed(1)} minutos`);
+        totalGapTime += gapAfter;
+      }
     }
-    const durationMinutes = diffMin;
+    
+    const durationSeconds = Math.round(intervalDuration / 1000);
     
     if (!stateData[interval.state]) {
       stateData[interval.state] = 0;
       stateDurations[interval.state] = 0;
     }
-    stateData[interval.state] += durationMinutes;
-    stateDurations[interval.state] += durationMinutes;
-    totalTime += durationMinutes;
+    stateData[interval.state] += durationSeconds;
+    stateDurations[interval.state] += durationSeconds;
+    totalTime += durationSeconds;
   });
+  
+  console.log(`Tiempo total de datos: ${(totalTime / 60).toFixed(1)} min, Tiempo total de gaps: ${(totalGapTime / (1000 * 60)).toFixed(1)} min`);
   
   // Preparar datos para el gráfico de pie
   const labels = [];
@@ -641,11 +668,11 @@ function createPieChart(intervals) {
   
   Object.keys(stateData).sort((a, b) => parseInt(a) - parseInt(b)).forEach(state => {
     const stateNum = parseInt(state);
-    const durationMinutes = stateData[state];
-    const percentage = ((durationMinutes / totalTime) * 100).toFixed(1);
+    const durationSeconds = stateData[state];
+    const percentage = ((durationSeconds / totalTime) * 100).toFixed(1);
     
     labels.push(`Estado ${stateNum}`);
-    data.push(durationMinutes);
+    data.push(durationSeconds);
     
     const colors = getStateColorChart(stateNum);
     backgroundColors.push(colors.bg);
@@ -699,10 +726,10 @@ function createPieChart(intervals) {
               return context[0].label;
             },
             label: function(context) {
-              const durationMinutes = context.parsed;
-              const percentage = ((durationMinutes / totalTime) * 100).toFixed(1);
-              // Usar formato dinámico
-              const timeFormatted = formatDynamicDuration(durationMinutes);
+              const durationSeconds = context.parsed;
+              const percentage = ((durationSeconds / totalTime) * 100).toFixed(1);
+              // Usar formato dinámico igual que las otras gráficas
+              const timeFormatted = formatDynamicDuration(durationSeconds);
               return [`Duración: ${timeFormatted}`, `Porcentaje: ${percentage}%`];
             }
           }
@@ -722,6 +749,7 @@ function createSpeedChart(intervals) {
   const speedData = [];
   const baseTime = intervals[0].start.getTime();
   
+  // Crear datos con interrupciones explícitas en gaps
   intervals.forEach((interval, index) => {
     const startTime = interval.start.getTime();
     const endTime = interval.end.getTime();
@@ -730,12 +758,28 @@ function createSpeedChart(intervals) {
     const startMinutes = (startTime - baseTime) / (1000 * 60);
     const endMinutes = (endTime - baseTime) / (1000 * 60);
     
+    // Verificar si hay gap con el intervalo anterior
+    let hasGap = false;
+    if (index > 0) {
+      const prevEnd = intervals[index-1].end.getTime();
+      const gapDuration = startTime - prevEnd;
+      hasGap = gapDuration >= 5 * 60 * 1000; // Gap ≥ 5 minutos
+    }
+    
+    // Si hay gap, añadir punto null para interrumpir la línea
+    if (hasGap) {
+      speedData.push({
+        x: startMinutes - 0.01, // Justo antes del nuevo intervalo
+        y: null // Valor null interrumpe la línea
+      });
+    }
+    
     // Usar velocidad del intervalo, o 0 si no hay datos
     const speedValue = (interval.avgSpeed !== null && interval.avgSpeed !== undefined && !isNaN(interval.avgSpeed)) 
       ? interval.avgSpeed 
       : 0;
     
-    // Añadir punto de inicio del intervalo
+    // Añadir puntos del intervalo
     speedData.push({
       x: startMinutes,
       y: speedValue,
@@ -748,7 +792,6 @@ function createSpeedChart(intervals) {
       hasSpeedData: interval.avgSpeed !== null && interval.avgSpeed !== undefined && !isNaN(interval.avgSpeed)
     });
     
-    // Añadir punto de fin del intervalo (para crear el escalón)
     speedData.push({
       x: endMinutes,
       y: speedValue,
@@ -771,8 +814,8 @@ function createSpeedChart(intervals) {
     const currentStart = intervals[i].start.getTime();
     const gapDuration = currentStart - prevEnd;
     
-    // Si hay un gap de más de 5 minutos, considerarlo como salto de datos
-    if (gapDuration > 5 * 60 * 1000) {
+    // Solo gaps ≥ 5 minutos son significativos
+    if (gapDuration >= 5 * 60 * 1000) {
       const gapStartMinutes = (prevEnd - baseTime) / (1000 * 60);
       const gapEndMinutes = (currentStart - baseTime) / (1000 * 60);
       
@@ -849,7 +892,8 @@ function createSpeedChart(intervals) {
         pointHoverRadius: 0,
         pointBorderWidth: 0,
         tension: 0,
-        order: 2
+        order: 2,
+        spanGaps: false // No conectar gaps
       }, {
         label: 'Cursor',
         data: [], // Se llenará dinámicamente
@@ -874,7 +918,7 @@ function createSpeedChart(intervals) {
           position: 'bottom',
           title: {
             display: true,
-            text: 'Tiempo (HH:MM)',
+            text: 'Tiempo (HH:MM:SS)',
             color: 'rgb(255, 255, 255)',
             font: {
               size: 14,
@@ -1042,8 +1086,8 @@ function createChart(intervals) {
     const currentStart = intervals[i].start.getTime();
     const gapDuration = currentStart - prevEnd;
     
-    // Si hay un gap de más de 5 minutos, considerarlo como salto de datos
-    if (gapDuration > 5 * 60 * 1000) {
+    // Solo gaps ≥ 5 minutos son significativos
+    if (gapDuration >= 5 * 60 * 1000) {
       const gapStartMinutes = (prevEnd - baseTime) / (1000 * 60);
       const gapEndMinutes = (currentStart - baseTime) / (1000 * 60);
       
@@ -1101,16 +1145,32 @@ function createChart(intervals) {
   
 
   
+  // Crear datos con interrupciones explícitas en gaps
   intervals.forEach((interval, index) => {
     const startTime = interval.start.getTime();
     const endTime = interval.end.getTime();
-    const duration = endTime - startTime;
     
     // Calcular minutos desde el inicio para posicionamiento real
     const startMinutes = (startTime - baseTime) / (1000 * 60);
     const endMinutes = (endTime - baseTime) / (1000 * 60);
     
-    // Añadir punto de inicio
+    // Verificar si hay gap con el intervalo anterior
+    let hasGap = false;
+    if (index > 0) {
+      const prevEnd = intervals[index-1].end.getTime();
+      const gapDuration = startTime - prevEnd;
+      hasGap = gapDuration >= 5 * 60 * 1000; // Gap ≥ 5 minutos
+    }
+    
+    // Si hay gap, añadir punto null para interrumpir la línea
+    if (hasGap) {
+      chartData.push({
+        x: startMinutes - 0.01, // Justo antes del nuevo intervalo
+        y: null // Valor null interrumpe la línea
+      });
+    }
+    
+    // Añadir puntos del intervalo
     chartData.push({
       x: startMinutes,
       y: interval.state,
@@ -1121,7 +1181,6 @@ function createChart(intervals) {
       realEndTime: interval.end
     });
     
-    // Añadir punto de fin (para crear el escalón)
     chartData.push({
       x: endMinutes,
       y: interval.state,
@@ -1155,7 +1214,8 @@ function createChart(intervals) {
          pointRadius: 0,
          pointHoverRadius: 0,
          pointBorderWidth: 0,
-         order: 2
+         order: 2,
+         spanGaps: false // No conectar gaps
        }, {
          label: 'Cursor',
          data: [], // Se llenará dinámicamente
@@ -1180,7 +1240,7 @@ function createChart(intervals) {
           position: 'bottom',
           title: {
             display: true,
-            text: 'Tiempo (HH:MM)',
+            text: 'Tiempo (HH:MM:SS)',
             color: 'rgb(255, 255, 255)',
             font: {
               size: 14,
@@ -1694,7 +1754,7 @@ function parseToDate(v){
 function pad2(n){ return String(n).padStart(2,'0'); }
 function formatDate(d){ return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()}`; }
 function formatTime(d){ 
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
 // Función mejorada para mostrar tiempo con más contexto
@@ -1708,10 +1768,11 @@ function formatTimeWithLabel(d) {
 function formatTime12h(d) {
   const hours = d.getHours();
   const minutes = d.getMinutes();
+  const seconds = d.getSeconds();
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const hours12 = hours % 12;
   const displayHours = hours12 ? hours12 : 12;
-  return `${displayHours}:${pad2(minutes)} ${ampm}`;
+  return `${displayHours}:${pad2(minutes)}:${pad2(seconds)} ${ampm}`;
 }
 
 // Variable global para el formato de tiempo (24h por defecto, más común internacionalmente)
@@ -1747,25 +1808,32 @@ function msToHM(ms){
   return `${h}:${pad2(m)}`;
 }
 
-// Función para formatear duración de forma dinámica (minutos si < 60min, horas si >= 60min)
-function formatDynamicDuration(totalMinutes) {
-  // Asegurar que tengamos al menos 1 minuto
-  if (totalMinutes < 1) {
-    return '< 1min';
-  } else if (totalMinutes < 60) {
-    // Mostrar solo en minutos si es menos de 1 hora
-    return `${totalMinutes}min`;
-  } else {
-    // Mostrar en formato h:mm si es 1 hora o más
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    if (m === 0) {
-      // Si no hay minutos adicionales, mostrar solo las horas
-      return `${h}h`;
+// Función para formatear duración con precisión de segundos
+function formatDynamicDuration(totalSeconds) {
+  if (totalSeconds < 60) {
+    // Mostrar en segundos si es menos de 1 minuto
+    return `${totalSeconds}seg`;
+  } else if (totalSeconds < 3600) {
+    // Mostrar en minutos si es menos de 1 hora
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (seconds === 0) {
+      return `${minutes}min`;
     } else {
-      // Mostrar horas y minutos
-      return `${h}h ${m}min`;
+      return `${minutes}min ${seconds}seg`;
     }
+  } else {
+    // Mostrar en horas si es 1 hora o más
+    const hours = Math.floor(totalSeconds / 3600);
+    const remainingSeconds = totalSeconds % 3600;
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    
+    let result = `${hours}h`;
+    if (minutes > 0) result += ` ${minutes}min`;
+    if (seconds > 0) result += ` ${seconds}seg`;
+    
+    return result;
   }
 }
 
@@ -1774,11 +1842,16 @@ function calculateVisualDuration(startDate, endDate) {
   // Calcular diferencia en milisegundos
   const diffMs = endDate.getTime() - startDate.getTime();
   
-  // Convertir a minutos totales (redondeando hacia arriba para no mostrar 0min en intervalos muy cortos)
-  const diffMin = Math.ceil(diffMs / (1000 * 60));
+  // Convertir a segundos totales (redondeando al más cercano para mayor precisión)
+  let diffSec = Math.round(diffMs / 1000);
   
-  // Usar formateo dinámico
-  return formatDynamicDuration(diffMin);
+  // Asegurar que intervalos válidos muestren al menos 1 segundo
+  if (diffSec === 0 && diffMs > 0) {
+    diffSec = 1;
+  }
+  
+  // Usar formateo dinámico con precisión de segundos
+  return formatDynamicDuration(diffSec);
 }
 
 function buildRecords(rows){
@@ -1821,38 +1894,59 @@ function computeIntervals(records){
     return speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length;
   }
   
+  // Función para detectar gaps significativos (≥ 5 minutos)
+  function detectSignificantGap(prevDate, currentDate) {
+    const gapMs = currentDate.getTime() - prevDate.getTime();
+    const threshold = 5 * 60 * 1000; // 5 minutos en milisegundos
+    
+    const isGap = gapMs >= threshold;
+    
+    if (isGap) {
+      const gapMinutes = (gapMs / (1000 * 60)).toFixed(1);
+      console.log(`🔍 Gap significativo detectado: ${gapMinutes} min entre ${formatTime(prevDate)} y ${formatTime(currentDate)}`);
+    }
+    
+    return isGap;
+  }
+  
   for(let i=1;i<records.length;i++){
-    if(records[i].state!==prevState){
+    // Verificar si hay un gap significativo entre registros consecutivos (≥ 5 minutos)
+    const hasGap = detectSignificantGap(records[i-1].date, records[i].date);
+    
+    if(records[i].state!==prevState || hasGap){
       const avgSpeed = calculateAverageSpeed(startIdx, i-1);
       intervals.push({
         state: prevState, 
         start: records[startIdx].date, 
-        end: records[i].date,  // El intervalo termina cuando comienza el nuevo estado
+        end: records[i-1].date,  // El intervalo termina en el último registro del estado actual
         avgSpeed: avgSpeed,
-        recordCount: i - startIdx
+        recordCount: i - startIdx,
+        isGapBefore: hasGap && records[i].state === prevState // Marcar si este intervalo fue cortado por un gap
       });
+      
+      // Si hay gap pero el estado no cambió, marcar que el siguiente intervalo empieza después de un gap
+      if(hasGap && records[i].state === prevState) {
+        console.log(`Gap detectado entre ${formatTime(records[i-1].date)} y ${formatTime(records[i].date)} (duración: ${((records[i].date.getTime() - records[i-1].date.getTime()) / (1000 * 60)).toFixed(1)} min)`);
+      }
+      
       startIdx=i; prevState=records[i].state;
     }
   }
-  // Último intervalo: usar un tiempo estimado basado en la última muestra
+  
+  // Último intervalo: terminar exactamente en el último dato disponible
   const lastStart = records[startIdx].date;
   const lastEnd = records[records.length-1].date;
-  
-  // Si solo hay un punto para el último intervalo, estimar duración mínima
-  let finalEnd = lastEnd;
-  if(startIdx === records.length-1) {
-    // Solo hay un punto, agregar 1 minuto por defecto
-    finalEnd = new Date(lastEnd.getTime() + 60000);
-  }
   
   const lastAvgSpeed = calculateAverageSpeed(startIdx, records.length-1);
   intervals.push({
     state: prevState, 
     start: lastStart, 
-    end: finalEnd,
+    end: lastEnd,
     avgSpeed: lastAvgSpeed,
-    recordCount: records.length - startIdx
+    recordCount: records.length - startIdx,
+    isGapBefore: false
   });
+  
   return intervals;
 }
 
@@ -1863,12 +1957,37 @@ function renderIntervals(intervals){
     return; 
   }
   
+  // Detectar gaps para mostrar información
+  const gaps = [];
+  for (let i = 1; i < intervals.length; i++) {
+    const prevEnd = intervals[i-1].end.getTime();
+    const currentStart = intervals[i].start.getTime();
+    const gapDuration = currentStart - prevEnd;
+    
+    if (gapDuration >= 5 * 60 * 1000) {
+      gaps.push({
+        index: i,
+        start: new Date(prevEnd),
+        end: new Date(currentStart),
+        duration: gapDuration,
+        durationFormatted: formatDynamicDuration(Math.round(gapDuration / 1000))
+      });
+    }
+  }
+  
   // Obtener el rango de fechas para mostrar en los headers
   const dateRange = getDateRange(intervals);
   
   // Mostrar el dashboard
   toggleDashboard(true);
   
+  // Mostrar información de gaps detectados si los hay (solo en consola)
+  if (gaps.length > 0) {
+    console.log(`🔍 Se detectaron ${gaps.length} gaps en los datos:`);
+    gaps.forEach((gap, index) => {
+      console.log(`  Gap ${index + 1}: ${formatTime(gap.start)} - ${formatTime(gap.end)} (${gap.durationFormatted})`);
+    });
+  }
   
   // Crear gráficos
   createChart(intervals);
@@ -1892,7 +2011,36 @@ function renderIntervals(intervals){
   html += '</tr></thead><tbody class="divide-y divide-dark-border bg-dark-card/20">';
   
    let currentDate = null;
-     for(const it of intervals){
+     for(let idx = 0; idx < intervals.length; idx++){
+     const it = intervals[idx];
+     
+     // Verificar si hay un gap antes de este intervalo
+     const gapBefore = gaps.find(gap => gap.index === idx);
+     
+     // Mostrar fila de gap si existe
+     if (gapBefore) {
+       const gapRowClass = 'bg-gray-800/30 border-l-4 border-gray-500';
+       html += `<tr class="${gapRowClass}">`;
+       html += `<td class="px-6 py-4 text-sm font-medium text-gray-400">
+         <span class="inline-flex items-center justify-center px-3 py-1 text-xs font-semibold rounded-lg bg-gray-600/20 text-gray-400 border border-gray-600/30">
+           <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+           </svg>
+           GAP
+         </span>
+       </td>`;
+       
+       if (hasMultipleDates) {
+         html += `<td class="px-6 py-4 text-sm text-gray-400">${formatDate(gapBefore.start)}</td>`;
+       }
+       
+       const gapTimeRange = formatTimeRange(gapBefore.start, gapBefore.end);
+       html += `<td class="px-6 py-4 text-sm text-gray-400 font-medium">${gapTimeRange}</td>`;
+       html += `<td class="px-6 py-4 text-sm text-gray-400 font-semibold italic">${gapBefore.durationFormatted}</td>`;
+       html += `<td class="px-6 py-4 text-sm text-gray-500 italic">Sin datos</td>`;
+       html += `</tr>`;
+     }
+     
      // Calcular duración basada en las horas mostradas (HH:MM)
      const visualDuration = calculateVisualDuration(it.start, it.end);
      const intervalDate = formatDate(it.start);

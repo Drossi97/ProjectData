@@ -1,9 +1,0 @@
-# Excluir archivos CSV de datos
-*.csv
-
-# Excluir archivos de datos temporales
-*.tmp
-*.temp
-
-# Excluir logs
-*.log
