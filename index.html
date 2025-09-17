@@ -610,9 +610,19 @@ function createPieChart(intervals) {
   
   intervals.forEach(interval => {
     // Calcular duración visual en minutos
-    const visualDurationStr = calculateVisualDuration(interval.start, interval.end);
-    const [h, m] = visualDurationStr.split(':').map(n => parseInt(n));
-    const durationMinutes = h * 60 + m;
+    const startHour = interval.start.getHours();
+    const startMin = interval.start.getMinutes();
+    const endHour = interval.end.getHours();
+    const endMin = interval.end.getMinutes();
+    
+    const startTotalMin = startHour * 60 + startMin;
+    const endTotalMin = endHour * 60 + endMin;
+    
+    let diffMin = endTotalMin - startTotalMin;
+    if (diffMin < 0) {
+      diffMin += 24 * 60;
+    }
+    const durationMinutes = diffMin;
     
     if (!stateData[interval.state]) {
       stateData[interval.state] = 0;
@@ -633,10 +643,6 @@ function createPieChart(intervals) {
     const stateNum = parseInt(state);
     const durationMinutes = stateData[state];
     const percentage = ((durationMinutes / totalTime) * 100).toFixed(1);
-    // Convertir minutos a formato h:mm
-    const h = Math.floor(durationMinutes / 60);
-    const m = durationMinutes % 60;
-    const timeFormatted = `${h}:${pad2(m)}`;
     
     labels.push(`Estado ${stateNum}`);
     data.push(durationMinutes);
@@ -695,11 +701,9 @@ function createPieChart(intervals) {
             label: function(context) {
               const durationMinutes = context.parsed;
               const percentage = ((durationMinutes / totalTime) * 100).toFixed(1);
-              // Convertir minutos a formato h:mm
-              const h = Math.floor(durationMinutes / 60);
-              const m = durationMinutes % 60;
-              const timeFormatted = `${h}:${pad2(m)}`;
-              return [`Duración: ${timeFormatted}h`, `Porcentaje: ${percentage}%`];
+              // Usar formato dinámico
+              const timeFormatted = formatDynamicDuration(durationMinutes);
+              return [`Duración: ${timeFormatted}`, `Porcentaje: ${percentage}%`];
             }
           }
         }
@@ -870,7 +874,7 @@ function createSpeedChart(intervals) {
           position: 'bottom',
           title: {
             display: true,
-            text: 'Tiempo',
+            text: 'Tiempo (HH:MM)',
             color: 'rgb(255, 255, 255)',
             font: {
               size: 14,
@@ -884,7 +888,7 @@ function createSpeedChart(intervals) {
           ticks: {
             callback: function(value, index, values) {
               const startTime = new Date(baseTime + value * 60 * 1000);
-              const timeStr = formatTime(startTime);
+              const timeStr = getFormattedTime(startTime);
               const currentDate = formatDate(startTime);
               
               // Para el primer tick, siempre mostrar la fecha
@@ -1176,7 +1180,7 @@ function createChart(intervals) {
           position: 'bottom',
           title: {
             display: true,
-            text: 'Tiempo',
+            text: 'Tiempo (HH:MM)',
             color: 'rgb(255, 255, 255)',
             font: {
               size: 14,
@@ -1190,7 +1194,7 @@ function createChart(intervals) {
           ticks: {
             callback: function(value, index, values) {
               const startTime = new Date(baseTime + value * 60 * 1000);
-              const timeStr = formatTime(startTime);
+              const timeStr = getFormattedTime(startTime);
               const currentDate = formatDate(startTime);
               
               // Para el primer tick, siempre mostrar la fecha
@@ -1442,12 +1446,13 @@ function showCustomTooltip(event, dataPoint) {
     : 'N/A';
   
   // Contenido del tooltip
+  const timeRange = formatTimeRange(dataPoint.realStartTime, dataPoint.realEndTime);
   customTooltip.innerHTML = `
-    <div style="font-weight: 600; margin-bottom: 4px; color: rgb(31, 41, 55); font-size: 14px;">Estado ${dataPoint.y}</div>
-    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 13px;">Fecha: ${formatDate(dataPoint.realStartTime)}</div>
-    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 13px;">Horario: ${dataPoint.startTime}h - ${dataPoint.endTime}h</div>
-    <div style="margin-bottom: 2px; color: rgb(59, 130, 246); font-size: 13px; font-weight: 600;">Duración: ${dataPoint.duration}h</div>
-    <div style="color: rgb(34, 197, 94); font-size: 13px; font-weight: 600;">Velocidad Media: ${speedDisplay}</div>
+    <div style="font-weight: 700; margin-bottom: 6px; color: rgb(31, 41, 55); font-size: 16px;">Estado ${dataPoint.y}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Fecha: ${formatDate(dataPoint.realStartTime)}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Horario: ${timeRange}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Duración: ${dataPoint.duration}</div>
+    <div style="color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Velocidad: ${speedDisplay}</div>
   `;
   
   // Posicionar tooltip cerca del cursor (usar coordenadas del evento nativo)
@@ -1589,12 +1594,13 @@ function showSpeedCustomTooltip(event, dataPoint) {
     : 'rgb(156, 163, 175)'; // gris para sin datos
 
   // Contenido del tooltip
+  const timeRange = formatTimeRange(dataPoint.realStartTime, dataPoint.realEndTime);
   customSpeedTooltip.innerHTML = `
-    <div style="font-weight: 600; margin-bottom: 4px; color: rgb(31, 41, 55); font-size: 14px;">Estado ${dataPoint.y}</div>
-    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 13px;">Fecha: ${formatDate(dataPoint.realStartTime)}</div>
-    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 13px;">Horario: ${dataPoint.startTime}h - ${dataPoint.endTime}h</div>
-    <div style="margin-bottom: 2px; color: rgb(59, 130, 246); font-size: 13px; font-weight: 600;">Duración: ${dataPoint.duration}h</div>
-    <div style="color: ${speedColor}; font-size: 13px; font-weight: 600;">Velocidad: ${speedDisplay}</div>
+    <div style="font-weight: 700; margin-bottom: 6px; color: rgb(31, 41, 55); font-size: 16px;">Estado ${dataPoint.y}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Fecha: ${formatDate(dataPoint.realStartTime)}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Horario: ${timeRange}</div>
+    <div style="margin-bottom: 2px; color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Duración: ${dataPoint.duration}</div>
+    <div style="color: rgb(31, 41, 55); font-size: 12px; font-weight: 400;">Velocidad: ${speedDisplay}</div>
   `;
   
   // Posicionar tooltip cerca del cursor
@@ -1690,6 +1696,47 @@ function formatDate(d){ return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d
 function formatTime(d){ 
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+
+// Función mejorada para mostrar tiempo con más contexto
+function formatTimeWithLabel(d) {
+  const hours = d.getHours();
+  const minutes = d.getMinutes();
+  return `${pad2(hours)}:${pad2(minutes)}h`;
+}
+
+// Función para formatear en 12 horas (AM/PM)
+function formatTime12h(d) {
+  const hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const hours12 = hours % 12;
+  const displayHours = hours12 ? hours12 : 12;
+  return `${displayHours}:${pad2(minutes)} ${ampm}`;
+}
+
+// Variable global para el formato de tiempo (24h por defecto, más común internacionalmente)
+let use24HourFormat = true;
+
+// Función para obtener el tiempo formateado según la preferencia
+function getFormattedTime(d) {
+  return use24HourFormat ? formatTime(d) : formatTime12h(d);
+}
+
+// Función para mostrar rango de tiempo más claro
+function formatTimeRange(startDate, endDate) {
+  const startTime = getFormattedTime(startDate);
+  const endTime = getFormattedTime(endDate);
+  const startDateStr = formatDate(startDate);
+  const endDateStr = formatDate(endDate);
+  
+  // Si es el mismo día, solo mostrar las horas
+  if (startDateStr === endDateStr) {
+    return `${startTime} - ${endTime}`;
+  } else {
+    // Si son días diferentes, mostrar fecha también
+    return `${startTime} (${startDateStr}) - ${endTime} (${endDateStr})`;
+  }
+}
 function msToHM(ms){
   if(!isFinite(ms)) return '';
   ms=Math.max(0,ms);
@@ -1700,31 +1747,38 @@ function msToHM(ms){
   return `${h}:${pad2(m)}`;
 }
 
-// Nueva función para calcular duración basada en horas mostradas (HH:MM)
-function calculateVisualDuration(startDate, endDate) {
-  // Obtener horas y minutos mostrados (truncados)
-  const startHour = startDate.getHours();
-  const startMin = startDate.getMinutes();
-  const endHour = endDate.getHours();
-  const endMin = endDate.getMinutes();
-  
-  // Convertir a minutos totales desde medianoche
-  const startTotalMin = startHour * 60 + startMin;
-  const endTotalMin = endHour * 60 + endMin;
-  
-  // Calcular diferencia en minutos
-  let diffMin = endTotalMin - startTotalMin;
-  
-  // Manejar cambio de día (si end < start)
-  if (diffMin < 0) {
-    diffMin += 24 * 60; // Agregar 24 horas en minutos
+// Función para formatear duración de forma dinámica (minutos si < 60min, horas si >= 60min)
+function formatDynamicDuration(totalMinutes) {
+  // Asegurar que tengamos al menos 1 minuto
+  if (totalMinutes < 1) {
+    return '< 1min';
+  } else if (totalMinutes < 60) {
+    // Mostrar solo en minutos si es menos de 1 hora
+    return `${totalMinutes}min`;
+  } else {
+    // Mostrar en formato h:mm si es 1 hora o más
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (m === 0) {
+      // Si no hay minutos adicionales, mostrar solo las horas
+      return `${h}h`;
+    } else {
+      // Mostrar horas y minutos
+      return `${h}h ${m}min`;
+    }
   }
+}
+
+// Nueva función para calcular duración real basada en timestamps completos
+function calculateVisualDuration(startDate, endDate) {
+  // Calcular diferencia en milisegundos
+  const diffMs = endDate.getTime() - startDate.getTime();
   
-  // Convertir a formato h:mm
-  const h = Math.floor(diffMin / 60);
-  const m = diffMin % 60;
+  // Convertir a minutos totales (redondeando hacia arriba para no mostrar 0min en intervalos muy cortos)
+  const diffMin = Math.ceil(diffMs / (1000 * 60));
   
-  return `${h}:${pad2(m)}`;
+  // Usar formateo dinámico
+  return formatDynamicDuration(diffMin);
 }
 
 function buildRecords(rows){
@@ -1832,9 +1886,8 @@ function renderIntervals(intervals){
     html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Fecha</th>';
   }
   
-  html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Hora inicio</th>';
-  html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Hora fin</th>';
-  html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Duración (h:m)</th>';
+  html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Horario</th>';
+  html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Duración</th>';
   html += '<th class="px-6 py-4 text-left text-sm font-semibold text-text-primary bg-dark-card/50">Velocidad Media</th>';
   html += '</tr></thead><tbody class="divide-y divide-dark-border bg-dark-card/20">';
   
@@ -1857,8 +1910,8 @@ function renderIntervals(intervals){
        html += `<td class="${dateClass}">${intervalDate}</td>`;
      }
      
-     html += `<td class="px-6 py-4 text-sm text-text-primary">${formatTime(it.start)}</td>`;
-     html += `<td class="px-6 py-4 text-sm text-text-primary">${formatTime(it.end)}</td>`;
+     const timeRangeForTable = formatTimeRange(it.start, it.end);
+     html += `<td class="px-6 py-4 text-sm text-text-primary font-medium">${timeRangeForTable}</td>`;
      html += `<td class="px-6 py-4 text-sm text-text-primary font-semibold">${visualDuration}</td>`;
      
      // Mostrar velocidad media del intervalo
