@@ -240,7 +240,7 @@ export function NavigationPieChart({ results }: NavigationPieChartProps) {
       `}</style>
       <Card style={{ backgroundColor: '#171717', borderColor: '#2C2C2C' }}>
         <CardHeader>
-          <CardTitle className="text-white text-xl font-semibold">Distribución por actividad del barco</CardTitle>
+          <CardTitle className="text-white text-xl font-semibold">Distribución de la actividad del barco</CardTitle>
         </CardHeader>
       <CardContent>
         <div className="w-full">

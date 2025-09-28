@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react"
 import {
-  LineChart,
+  LineChart as RechartsLineChart,
   Line,
   XAxis,
   YAxis,
@@ -12,9 +12,9 @@ import {
   ReferenceArea,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CSVAnalysisResult, DataInterval, PortAnalysis } from "@/hooks/useCSVProcessor"
+import { CSVAnalysisResult } from "@/hooks/useCSVProcessor"
 
-interface IntervalChartProps {
+interface LineChartProps {
   results: CSVAnalysisResult | null
 }
 
@@ -34,18 +34,25 @@ interface ChartDataPoint {
   navStatus: string
   navStatusValue: number | null
   classification?: IntervalClassification
-  isGap?: boolean // Nueva propiedad para marcar gaps
-  isStartPoint?: boolean // Nueva propiedad para marcar puntos de inicio visibles
+  isGap?: boolean
+  intervalStartTime?: string
+  intervalEndTime?: string
+  intervalStartDate?: string
+  intervalEndDate?: string
+  duration?: string
+  isStartPoint?: boolean
+  isCenterPoint?: boolean
+  isEndPoint?: boolean
 }
 
-export function IntervalChart({ results }: IntervalChartProps) {
+export function LineChart({ results }: LineChartProps) {
   if (!results || !results.success || !results.data) return null
 
   // Función de clasificación compartida con NavigationPieChart
   const classifyInterval = (
     navStatus: string,
-    startPort: PortAnalysis | undefined,
-    endPort: PortAnalysis | undefined
+    startPort: any | undefined,
+    endPort: any | undefined
   ): IntervalClassification => {
     // If no port data available
     if (!startPort || !endPort) {
@@ -115,7 +122,8 @@ export function IntervalChart({ results }: IntervalChartProps) {
   // Estado para el hover
   const [hoveredData, setHoveredData] = useState<ChartDataPoint | null>(null)
 
-  // Crear datos del gráfico
+
+  // Crear datos del gráfico (un punto por intervalo en el centro)
   const chartData = useMemo(() => {
     const data: ChartDataPoint[] = []
 
@@ -132,7 +140,7 @@ export function IntervalChart({ results }: IntervalChartProps) {
       const startTimestamp = new Date(`${interval.startDate} ${interval.startTime}`).getTime()
       const endTimestamp = new Date(`${interval.endDate} ${interval.endTime}`).getTime()
 
-      // Classify the interval
+      // Classify the interval using port distance logic
       const classification = classifyInterval(interval.navStatus, interval.startPort, interval.endPort);
 
       // Verificar si hay un gap con el intervalo anterior
@@ -141,9 +149,8 @@ export function IntervalChart({ results }: IntervalChartProps) {
         const prevEndTimestamp = new Date(`${prevInterval.endDate} ${prevInterval.endTime}`).getTime()
         const gapInSeconds = (startTimestamp - prevEndTimestamp) / 1000
 
-        // Si hay un gap mayor a 0.6 segundos (igual que en useCSVProcessor)
+        // Si hay un gap mayor a 0.6 segundos
         if (gapInSeconds > 0.6) {
-          // Agregar punto de gap (con datos nulos)
           data.push({
             time: new Date(prevEndTimestamp).toTimeString().split(' ')[0].substring(0, 8),
             date: prevInterval.endDate,
@@ -156,7 +163,10 @@ export function IntervalChart({ results }: IntervalChartProps) {
         }
       }
 
-      // Punto de inicio visible (lo que el usuario ve)
+      // Puntos intermedios del intervalo para mejor interacción
+      const intervalDuration = endTimestamp - startTimestamp
+
+      // Punto al inicio del intervalo
       data.push({
         time: interval.startTime,
         date: interval.startDate,
@@ -165,10 +175,33 @@ export function IntervalChart({ results }: IntervalChartProps) {
         navStatus: interval.navStatus,
         navStatusValue: parseInt(interval.navStatus) || 0,
         classification,
-        isStartPoint: true // Marcar como punto de inicio visible
+        intervalStartTime: interval.startTime,
+        intervalEndTime: interval.endTime,
+        intervalStartDate: interval.startDate,
+        intervalEndDate: interval.endDate,
+        duration: interval.duration,
+        isStartPoint: true
       })
 
-      // Punto de fin invisible (necesario para stepAfter)
+      // Punto en el centro del intervalo
+      const centerTimestamp = startTimestamp + intervalDuration / 2
+      data.push({
+        time: new Date(centerTimestamp).toTimeString().split(' ')[0].substring(0, 8),
+        date: interval.startDate,
+        timestamp: centerTimestamp,
+        speed: interval.avgSpeed,
+        navStatus: interval.navStatus,
+        navStatusValue: parseInt(interval.navStatus) || 0,
+        classification,
+        intervalStartTime: interval.startTime,
+        intervalEndTime: interval.endTime,
+        intervalStartDate: interval.startDate,
+        intervalEndDate: interval.endDate,
+        duration: interval.duration,
+        isCenterPoint: true
+      })
+
+      // Punto al final del intervalo
       data.push({
         time: interval.endTime,
         date: interval.endDate,
@@ -176,7 +209,13 @@ export function IntervalChart({ results }: IntervalChartProps) {
         speed: interval.avgSpeed,
         navStatus: interval.navStatus,
         navStatusValue: parseInt(interval.navStatus) || 0,
-        classification
+        classification,
+        intervalStartTime: interval.startTime,
+        intervalEndTime: interval.endTime,
+        intervalStartDate: interval.startDate,
+        intervalEndDate: interval.endDate,
+        duration: interval.duration,
+        isEndPoint: true
       })
     })
 
@@ -196,20 +235,19 @@ export function IntervalChart({ results }: IntervalChartProps) {
 
   const handleZoom = (zoomIn: boolean) => {
     const totalLength = chartData.length
-    const center = Math.floor(totalLength / 2)
 
     if (zoomIn) {
-      // Zoom In
       if (!zoomDomain) {
-        // Primera vez: mostrar 50% centrado
-        const rangeSize = Math.floor(totalLength * 0.5)
+        // Primer zoom: mostrar 60% centrado
+        const rangeSize = Math.floor(totalLength * 0.6)
+        const center = Math.floor(totalLength / 2)
         const start = Math.max(0, center - Math.floor(rangeSize / 2))
         const end = Math.min(totalLength - 1, start + rangeSize)
         setZoomDomain({ startIndex: start, endIndex: end })
       } else {
-        // Reducir rango actual
         const currentRange = zoomDomain.endIndex - zoomDomain.startIndex
         if (currentRange > 20) {
+          // Reducir el rango actual en 25%
           const reduction = Math.floor(currentRange * 0.25)
           const newStart = zoomDomain.startIndex + reduction
           const newEnd = zoomDomain.endIndex - reduction
@@ -217,11 +255,11 @@ export function IntervalChart({ results }: IntervalChartProps) {
         }
       }
     } else {
-      // Zoom Out
       if (!zoomDomain) return
 
       const currentRange = zoomDomain.endIndex - zoomDomain.startIndex
-      const expansion = Math.floor(currentRange * 0.4)
+      // Expandir el rango actual en 30%
+      const expansion = Math.floor(currentRange * 0.3)
       const newStart = Math.max(0, zoomDomain.startIndex - expansion)
       const newEnd = Math.min(totalLength - 1, zoomDomain.endIndex + expansion)
 
@@ -239,7 +277,7 @@ export function IntervalChart({ results }: IntervalChartProps) {
 
   // Funciones para el pan
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!zoomDomain) return // Solo pan cuando hay zoom
+    if (!zoomDomain) return
     setIsDragging(true)
     setDragStart({ x: e.clientX, y: e.clientY })
   }
@@ -252,14 +290,12 @@ export function IntervalChart({ results }: IntervalChartProps) {
     const totalRange = chartData.length
     const currentRange = zoomDomain.endIndex - zoomDomain.startIndex
 
-    // Calcular movimiento proporcional
     const moveRatio = deltaX / chartWidth
     const pointsToMove = Math.round(moveRatio * currentRange * 2)
 
     let newStart = zoomDomain.startIndex - pointsToMove
     let newEnd = zoomDomain.endIndex - pointsToMove
 
-    // Ajustar límites
     if (newStart < 0) {
       newStart = 0
       newEnd = currentRange
@@ -281,8 +317,8 @@ export function IntervalChart({ results }: IntervalChartProps) {
   // Funciones de formateo
   const formatTimeLabel = (value: string, index: number) => {
     const dataPoint = visibleData[index]
-    if (!dataPoint) return value
-    return dataPoint.time.substring(0, 5) + 'h'
+    if (!dataPoint || dataPoint.isGap) return ''
+    return value.substring(0, 5) + 'h'
   }
 
   const formatDateLabel = (value: string, index: number) => {
@@ -309,23 +345,38 @@ export function IntervalChart({ results }: IntervalChartProps) {
   const minStatus = statusValues.length > 0 ? Math.min(...statusValues, 0) : 0
   const maxStatus = statusValues.length > 0 ? Math.max(...statusValues, 2) : 2
 
-  // Función para formatear horas sin milisegundos
-  const formatTimeWithoutMs = (timeString: string) => {
-    if (!timeString || timeString === '--:--:--') return timeString
-    return timeString.split('.')[0] // Quitar todo después del punto (milisegundos)
-  }
+  // Funciones auxiliares para hover
+  const formatDurationWithUnits = (duration: string | number | undefined): string => {
+    if (!duration) return '--:--:--'
 
-  // Función para convertir HH:MM:SS a segundos
-  const timeToSeconds = (timeString: string): number => {
-    if (!timeString || timeString === '--:--:--') return 0
-    const parts = timeString.split(':').map(Number)
-    if (parts.length !== 3) return 0
-    return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  }
+    if (typeof duration === 'number') {
+      const seconds = duration
+      if (seconds === 0) return '--:--:--'
 
-  // Función para formatear duración con unidades apropiadas
-  const formatDurationWithUnits = (timeString: string): string => {
-    const seconds = timeToSeconds(timeString)
+      const days = Math.floor(seconds / (24 * 3600))
+      const hours = Math.floor((seconds % (24 * 3600)) / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const secs = Math.floor(seconds % 60)
+
+      if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m ${secs}s`
+      } else if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`
+      } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`
+      } else {
+        return `${secs}s`
+      }
+    }
+
+    const timeToSeconds = (timeString: string): number => {
+      if (!timeString || timeString === '--:--:--') return 0
+      const parts = timeString.split(':').map(Number)
+      if (parts.length !== 3) return 0
+      return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    }
+
+    const seconds = timeToSeconds(duration)
     if (seconds === 0) return '--:--:--'
 
     const days = Math.floor(seconds / (24 * 3600))
@@ -344,11 +395,12 @@ export function IntervalChart({ results }: IntervalChartProps) {
     }
   }
 
-  // Función para formatear horas del día con unidades
-  const formatTimeWithUnits = (timeString: string): string => {
-    if (!timeString || timeString === '--:--:--') return timeString
+  const formatTimeWithUnits = (timeString: string | undefined): string => {
+    if (!timeString || timeString === '--:--:--') return '--:--:--'
+    if (typeof timeString !== 'string') return String(timeString || '--:--:--')
+
     const parts = timeString.split(':').map(Number)
-    if (parts.length !== 3) return timeString
+    if (parts.length !== 3 || parts.some(isNaN)) return timeString
 
     const hours = parts[0]
     const minutes = parts[1]
@@ -357,9 +409,10 @@ export function IntervalChart({ results }: IntervalChartProps) {
     return `${hours}h ${minutes}m ${seconds}s`
   }
 
-  // Función para formatear fecha de YYYY-MM-DD a DD/MM/YYYY
-  const formatDate = (dateString: string): string => {
+  const formatDate = (dateString: string | undefined): string => {
     if (!dateString || dateString === '--') return '--'
+    if (typeof dateString !== 'string') return String(dateString || '--')
+
     const parts = dateString.split('-')
     if (parts.length !== 3) return dateString
 
@@ -367,42 +420,33 @@ export function IntervalChart({ results }: IntervalChartProps) {
     return `${day}/${month}/${year}`
   }
 
-  // Encontrar el intervalo actual basado en el timestamp del hover
   const currentInterval = useMemo(() => {
     if (!hoveredData || hoveredData.isGap) return null
 
-    // Buscar intervalos que contengan el timestamp con una tolerancia
-    const matchingIntervals = results.data?.intervals.filter(interval => {
-      const intervalStart = new Date(`${interval.startDate} ${interval.startTime}`).getTime()
-      const intervalEnd = new Date(`${interval.endDate} ${interval.endTime}`).getTime()
-      return hoveredData.timestamp >= intervalStart && hoveredData.timestamp <= intervalEnd
-    }) || []
-
-    if (matchingIntervals.length === 0) return null
-
-    // Si hay múltiples intervalos, priorizar el que tenga el timestamp más cercano al inicio
-    if (matchingIntervals.length > 1) {
-      return matchingIntervals.reduce((closest, current) => {
-        const currentStart = new Date(`${current.startDate} ${current.startTime}`).getTime()
-        const closestStart = new Date(`${closest.startDate} ${closest.startTime}`).getTime()
-        const currentDistance = Math.abs(hoveredData.timestamp - currentStart)
-        const closestDistance = Math.abs(hoveredData.timestamp - closestStart)
-        return currentDistance < closestDistance ? current : closest
-      })
+    if (hoveredData.intervalStartTime) {
+      return {
+        startTime: hoveredData.intervalStartTime,
+        endTime: hoveredData.intervalEndTime,
+        startDate: hoveredData.intervalStartDate,
+        endDate: hoveredData.intervalEndDate,
+        duration: hoveredData.duration,
+        navStatus: hoveredData.navStatus,
+        avgSpeed: hoveredData.speed,
+        startPort: null,
+        endPort: null
+      }
     }
 
-    return matchingIntervals[0]
-  }, [hoveredData, results.data?.intervals])
-
+    return null
+  }, [hoveredData])
 
   return (
     <Card style={{ backgroundColor: '#171717', borderColor: '#2C2C2C' }}>
       <CardHeader>
-        <CardTitle className="text-white text-xl font-semibold">Gráfico de Intervalos</CardTitle>
+        <CardTitle className="text-white text-xl font-semibold">Intervalos por estado de navegación</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Gráfico principal */}
           <div
             className="flex-1 min-w-0"
             onMouseDown={handleMouseDown}
@@ -414,10 +458,39 @@ export function IntervalChart({ results }: IntervalChartProps) {
               userSelect: 'none'
             }}
           >
-            {/* Controles superiores - Solo zoom */}
             <div className="flex justify-end items-center mb-4 flex-wrap gap-4">
-              {/* Botones de zoom (esquina derecha) */}
-              <div className="flex gap-2">
+              {/* Todos los controles (derecha) */}
+              <div className="flex gap-4">
+                {/* Botones de líneas */}
+                <button
+                  onClick={() => toggleLineVisibility('speed')}
+                  className={`flex items-center gap-2 transition-all duration-200 ${
+                    visibleLines.speed
+                      ? 'text-blue-400'
+                      : 'text-gray-400 hover:text-blue-300'
+                  }`}
+                >
+                  <div className={`w-4 h-0.5 ${
+                    visibleLines.speed ? 'bg-blue-400' : 'bg-gray-600'
+                  }`}></div>
+                  Velocidad
+                </button>
+
+                <button
+                  onClick={() => toggleLineVisibility('navStatus')}
+                  className={`flex items-center gap-2 transition-all duration-200 ${
+                    visibleLines.navStatus
+                      ? 'text-green-400'
+                      : 'text-gray-400 hover:text-green-300'
+                  }`}
+                >
+                  <div className={`w-4 h-0.5 ${
+                    visibleLines.navStatus ? 'bg-green-400' : 'bg-gray-600'
+                  }`}></div>
+                  Estado
+                </button>
+
+                {/* Botones de zoom */}
                 <button
                   onClick={() => handleZoom(true)}
                   className="px-3 py-1 text-sm rounded-lg transition-all duration-200 hover:bg-gray-700"
@@ -453,15 +526,15 @@ export function IntervalChart({ results }: IntervalChartProps) {
               </div>
             </div>
 
-            <ResponsiveContainer width="100%" height={500}>
-              <LineChart
-                data={visibleData}
-                margin={{
-                  top: 10,
-                  right: 30,
-                  left: 20,
-                  bottom: 20,
-                }}
+            <ResponsiveContainer width="100%" height={620}>
+                <RechartsLineChart
+                  data={visibleData}
+                  margin={{
+                    top: 40,
+                    right: 30,
+                    left: 20,
+                    bottom: 40,
+                  }}
                 onMouseMove={(data) => {
                   if (data && data.activePayload && data.activePayload.length > 0) {
                     setHoveredData(data.activePayload[0].payload)
@@ -536,69 +609,37 @@ export function IntervalChart({ results }: IntervalChartProps) {
                   }}
                 />
 
-                {/* Tooltip para mostrar solo el cursor (línea blanca) */}
                 <Tooltip
-                  cursor={{ strokeDasharray: '3 3', stroke: '#FFFFFF', strokeWidth: 2 }}
+                  cursor={false}
                   content={() => null}
                 />
 
-                {/* Intervalos de velocidad */}
                 {visibleLines.speed && (
-                  <>
-                    <Line
-                      xAxisId="times"
-                      yAxisId="speed"
-                      type="stepAfter"
-                      dataKey="speed"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls={false}
-                    />
-                    {/* Línea punteada para gaps de velocidad */}
-                    <Line
-                      xAxisId="times"
-                      yAxisId="speed"
-                      type="stepAfter"
-                      dataKey={(entry: any) => entry?.isGap ? null : entry?.speed}
-                      stroke="#3B82F6"
-                      strokeWidth={1}
-                      strokeDasharray="5,5"
-                      dot={false}
-                      connectNulls={false}
-                    />
-                  </>
+                  <Line
+                    xAxisId="times"
+                    yAxisId="speed"
+                    type="stepAfter"
+                    dataKey="speed"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    dot={false}
+                    connectNulls={false}
+                  />
                 )}
 
-                {/* Intervalos de NavStatus */}
                 {visibleLines.navStatus && (
-                  <>
-                    <Line
-                      xAxisId="times"
-                      yAxisId="status"
-                      type="stepAfter"
-                      dataKey="navStatusValue"
-                      stroke="#10B981"
-                      strokeWidth={3}
-                      dot={false}
-                      connectNulls={false}
-                    />
-                    {/* Línea punteada para gaps de navStatus */}
-                    <Line
-                      xAxisId="times"
-                      yAxisId="status"
-                      type="stepAfter"
-                      dataKey={(entry: any) => entry?.isGap ? null : entry?.navStatusValue}
-                      stroke="#10B981"
-                      strokeWidth={2}
-                      strokeDasharray="5,5"
-                      dot={false}
-                      connectNulls={false}
-                    />
-                  </>
+                  <Line
+                    xAxisId="times"
+                    yAxisId="status"
+                    type="stepAfter"
+                    dataKey="navStatusValue"
+                    stroke="#10B981"
+                    strokeWidth={3}
+                    dot={false}
+                    connectNulls={false}
+                  />
                 )}
 
-                {/* Área de referencia para mostrar gaps visualmente */}
                 {(() => {
                   const gapAreas: any[] = []
                   visibleData.forEach((dataPoint, index) => {
@@ -624,85 +665,12 @@ export function IntervalChart({ results }: IntervalChartProps) {
                     />
                   ))
                 })()}
-
-                {/* Texto "SIN DATOS" en los gaps */}
-                {(() => {
-                  const gapTexts: any[] = []
-                  visibleData.forEach((dataPoint, index) => {
-                    if (dataPoint.isGap && index < visibleData.length - 1) {
-                      const nextDataPoint = visibleData[index + 1]
-                      if (nextDataPoint && !nextDataPoint.isGap) {
-                        const gapDuration = nextDataPoint.timestamp - dataPoint.timestamp
-                        const gapHours = gapDuration / (1000 * 60 * 60)
-
-                        // Solo mostrar texto si el gap es mayor a 1 hora
-                        if (gapHours > 1) {
-                          gapTexts.push({
-                            x: (dataPoint.timestamp + nextDataPoint.timestamp) / 2,
-                            y: (minSpeed + maxSpeed) / 2,
-                            text: 'SIN DATOS'
-                          })
-                        }
-                      }
-                    }
-                  })
-                  return gapTexts.map((text, index) => (
-                    <text
-                      key={`gap-text-${index}`}
-                      x={text.x}
-                      y={text.y}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill="#FFFFFF"
-                      fontSize="12"
-                      fontWeight="bold"
-                      opacity={0.7}
-                    >
-                      {text.text}
-                    </text>
-                  ))
-                })()}
-              </LineChart>
+                </RechartsLineChart>
             </ResponsiveContainer>
-
-            {/* Controles inferiores - Leyenda visual */}
-            <div className="flex justify-center items-center gap-6 flex-wrap mt-4">
-              {/* Velocidad */}
-              <button
-                onClick={() => toggleLineVisibility('speed')}
-                className={`flex items-center gap-2 transition-all duration-200 ${
-                  visibleLines.speed
-                    ? 'text-blue-400'
-                    : 'text-gray-400 hover:text-blue-300'
-                }`}
-              >
-                <div className={`w-4 h-0.5 ${
-                  visibleLines.speed ? 'bg-blue-400' : 'bg-gray-600'
-                }`}></div>
-                Velocidad
-              </button>
-
-              {/* Estado */}
-              <button
-                onClick={() => toggleLineVisibility('navStatus')}
-                className={`flex items-center gap-2 transition-all duration-200 ${
-                  visibleLines.navStatus
-                    ? 'text-green-400'
-                    : 'text-gray-400 hover:text-green-300'
-                }`}
-              >
-                <div className={`w-4 h-0.5 ${
-                  visibleLines.navStatus ? 'bg-green-400' : 'bg-gray-600'
-                }`}></div>
-                Estado
-              </button>
-            </div>
 
           </div>
 
-          {/* Panel de información */}
           <div className="lg:w-40 space-y-3">
-            {/* Título del panel */}
             <div className="text-center mb-4">
               <h3 className="text-lg font-bold text-white mb-2">Información de intervalos</h3>
               <div className="w-full h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent"></div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { FileUploader } from "@/components/FileUploader"
-import { IntervalChart } from "@/components/IntervalChart"
+import { LineChart } from "@/components/LineChart"
 import { NavigationPieChart } from "@/components/NavigationPieChart"
 import { useCSVProcessor } from "@/hooks/useCSVProcessor"
 
@@ -32,7 +32,7 @@ export default function CSVAnalyzerPage() {
           isProcessing={isProcessing}
         />
 
-        <IntervalChart results={results} />
+        <LineChart results={results} />
 
         <NavigationPieChart results={results} />
               </div>
