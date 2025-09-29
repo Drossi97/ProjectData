@@ -119,6 +119,7 @@ export function LineChart({ results }: LineChartProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState<{x: number, y: number} | null>(null)
 
+
   // Estado para el hover
   const [hoveredData, setHoveredData] = useState<ChartDataPoint | null>(null)
 
@@ -233,24 +234,27 @@ export function LineChart({ results }: LineChartProps) {
     setVisibleLines(prev => ({ ...prev, [lineType]: !prev[lineType] }))
   }
 
-  const handleZoom = (zoomIn: boolean) => {
+  const handleZoom = (zoomIn: boolean, mousePosition?: number) => {
     const totalLength = chartData.length
 
     if (zoomIn) {
       if (!zoomDomain) {
-        // Primer zoom: mostrar 60% centrado
+        // Primer zoom: mostrar 60% centrado en la posición del mouse
         const rangeSize = Math.floor(totalLength * 0.6)
-        const center = Math.floor(totalLength / 2)
-        const start = Math.max(0, center - Math.floor(rangeSize / 2))
+        const centerIndex = mousePosition !== undefined ? Math.floor(totalLength * mousePosition) : Math.floor(totalLength / 2)
+        const start = Math.max(0, centerIndex - Math.floor(rangeSize / 2))
         const end = Math.min(totalLength - 1, start + rangeSize)
         setZoomDomain({ startIndex: start, endIndex: end })
       } else {
         const currentRange = zoomDomain.endIndex - zoomDomain.startIndex
+        const currentCenter = Math.floor((zoomDomain.startIndex + zoomDomain.endIndex) / 2)
+
         if (currentRange > 20) {
-          // Reducir el rango actual en 25%
+          // Reducir el rango actual en 25% centrado en la posición actual
           const reduction = Math.floor(currentRange * 0.25)
-          const newStart = zoomDomain.startIndex + reduction
-          const newEnd = zoomDomain.endIndex - reduction
+          const centerIndex = mousePosition !== undefined ? Math.floor(totalLength * mousePosition) : currentCenter
+          const newStart = Math.max(0, centerIndex - Math.floor((currentRange - reduction) / 2))
+          const newEnd = Math.min(totalLength - 1, centerIndex + Math.floor((currentRange - reduction) / 2))
           setZoomDomain({ startIndex: newStart, endIndex: newEnd })
         }
       }
@@ -258,10 +262,14 @@ export function LineChart({ results }: LineChartProps) {
       if (!zoomDomain) return
 
       const currentRange = zoomDomain.endIndex - zoomDomain.startIndex
-      // Expandir el rango actual en 30%
+      const currentCenter = Math.floor((zoomDomain.startIndex + zoomDomain.endIndex) / 2)
+
+      // Expandir el rango actual en 30% centrado en la posición actual
       const expansion = Math.floor(currentRange * 0.3)
-      const newStart = Math.max(0, zoomDomain.startIndex - expansion)
-      const newEnd = Math.min(totalLength - 1, zoomDomain.endIndex + expansion)
+      const centerIndex = mousePosition !== undefined ? Math.floor(totalLength * mousePosition) : currentCenter
+      const newRange = currentRange + expansion * 2
+      const newStart = Math.max(0, centerIndex - Math.floor(newRange / 2))
+      const newEnd = Math.min(totalLength - 1, centerIndex + Math.floor(newRange / 2))
 
       if (newEnd - newStart >= totalLength * 0.9) {
         setZoomDomain(null)
@@ -274,6 +282,8 @@ export function LineChart({ results }: LineChartProps) {
   const resetZoom = () => {
     setZoomDomain(null)
   }
+
+
 
   // Funciones para el pan
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -443,7 +453,7 @@ export function LineChart({ results }: LineChartProps) {
   return (
     <Card style={{ backgroundColor: '#171717', borderColor: '#2C2C2C' }}>
       <CardHeader>
-        <CardTitle className="text-white text-xl font-semibold">Intervalos por estado de navegación</CardTitle>
+        <CardTitle className="text-white text-xl font-semibold">Grafico de intervalos</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-col lg:flex-row gap-6">
@@ -453,10 +463,11 @@ export function LineChart({ results }: LineChartProps) {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{
-              cursor: isDragging ? 'grabbing' : (zoomDomain ? 'grab' : 'default'),
-              userSelect: 'none'
-            }}
+            onContextMenu={(e) => e.preventDefault()}
+              style={{
+                cursor: isDragging ? 'grabbing' : (zoomDomain ? 'grab' : 'crosshair'),
+                userSelect: 'none'
+              }}
           >
             <div className="flex justify-end items-center mb-4 flex-wrap gap-4">
               {/* Todos los controles (derecha) */}
@@ -464,7 +475,7 @@ export function LineChart({ results }: LineChartProps) {
                 {/* Botones de líneas */}
                 <button
                   onClick={() => toggleLineVisibility('speed')}
-                  className={`flex items-center gap-2 transition-all duration-200 ${
+                  className={`flex items-center gap-2 ${
                     visibleLines.speed
                       ? 'text-blue-400'
                       : 'text-gray-400 hover:text-blue-300'
@@ -478,7 +489,7 @@ export function LineChart({ results }: LineChartProps) {
 
                 <button
                   onClick={() => toggleLineVisibility('navStatus')}
-                  className={`flex items-center gap-2 transition-all duration-200 ${
+                  className={`flex items-center gap-2 ${
                     visibleLines.navStatus
                       ? 'text-green-400'
                       : 'text-gray-400 hover:text-green-300'
@@ -490,10 +501,11 @@ export function LineChart({ results }: LineChartProps) {
                   Estado
                 </button>
 
+
                 {/* Botones de zoom */}
                 <button
                   onClick={() => handleZoom(true)}
-                  className="px-3 py-1 text-sm rounded-lg transition-all duration-200 hover:bg-gray-700"
+                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
                   style={{
                     backgroundColor: '#2C2C2C',
                     color: '#9CA3AF'
@@ -504,7 +516,7 @@ export function LineChart({ results }: LineChartProps) {
 
                 <button
                   onClick={() => handleZoom(false)}
-                  className="px-3 py-1 text-sm rounded-lg transition-all duration-200 hover:bg-gray-700"
+                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
                   style={{
                     backgroundColor: '#2C2C2C',
                     color: '#9CA3AF'
@@ -515,7 +527,7 @@ export function LineChart({ results }: LineChartProps) {
 
                 <button
                   onClick={resetZoom}
-                  className="px-3 py-1 text-sm rounded-lg transition-all duration-200 hover:bg-gray-700"
+                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
                   style={{
                     backgroundColor: '#2C2C2C',
                     color: '#9CA3AF'
@@ -624,6 +636,7 @@ export function LineChart({ results }: LineChartProps) {
                     strokeWidth={2}
                     dot={false}
                     connectNulls={false}
+                    isAnimationActive={false}
                   />
                 )}
 
@@ -637,6 +650,7 @@ export function LineChart({ results }: LineChartProps) {
                     strokeWidth={3}
                     dot={false}
                     connectNulls={false}
+                    isAnimationActive={false}
                   />
                 )}
 
