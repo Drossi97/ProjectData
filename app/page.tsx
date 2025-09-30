@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { FileUploader } from "@/components/FileUploader"
 import { LineChart } from "@/components/LineChart"
-import { NavigationPieChart } from "@/components/NavigationPieChart"
-import { IntervalsTable } from "@/components/IntervalsTable"
+import { NavigationAnalysis } from "@/components/NavigationAnalysis"
 import { useCSVProcessor } from "@/hooks/useCSVProcessor"
 
 export default function CSVAnalyzerPage() {
@@ -35,9 +34,7 @@ export default function CSVAnalyzerPage() {
 
         <LineChart results={results} />
 
-        <NavigationPieChart results={results} />
-
-        <IntervalsTable results={results} />
+        <NavigationAnalysis results={results} />
               </div>
     </div>
   )

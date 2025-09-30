@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -16,6 +16,30 @@ interface FileUploaderProps {
 
 export function FileUploader({ files, onFilesChange, onAnalyze, isProcessing }: FileUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false)
+  const [dragCounter, setDragCounter] = useState(0)
+
+  // Prevenir el comportamiento por defecto del navegador para drag and drop
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+
+    // Agregar listeners al documento para prevenir el comportamiento por defecto
+    document.addEventListener('dragover', handleDragOver, false)
+    document.addEventListener('drop', handleDrop, false)
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('dragover', handleDragOver, false)
+      document.removeEventListener('drop', handleDrop, false)
+    }
+  }, [])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || [])
@@ -40,17 +64,32 @@ export function FileUploader({ files, onFilesChange, onAnalyze, isProcessing }: 
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    setIsDragOver(true)
+    event.stopPropagation()
+  }
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragCounter(prev => prev + 1)
+    if (dragCounter === 0) {
+      setIsDragOver(true)
+    }
   }
 
   const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    setIsDragOver(false)
+    event.stopPropagation()
+    setDragCounter(prev => prev - 1)
+    if (dragCounter === 1) {
+      setIsDragOver(false)
+    }
   }
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
+    event.stopPropagation()
     setIsDragOver(false)
+    setDragCounter(0)
     const droppedFiles = Array.from(event.dataTransfer.files)
     processFiles(droppedFiles)
   }
@@ -73,6 +112,7 @@ export function FileUploader({ files, onFilesChange, onAnalyze, isProcessing }: 
             }`}
             style={{ backgroundColor: '#2C2C2C' }}
             onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => document.getElementById("files")?.click()}

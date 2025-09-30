@@ -457,22 +457,10 @@ export function LineChart({ results }: LineChartProps) {
       </CardHeader>
       <CardContent>
         <div className="flex flex-col lg:flex-row gap-6">
-          <div
-            className="flex-1 min-w-0"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onContextMenu={(e) => e.preventDefault()}
-              style={{
-                cursor: isDragging ? 'grabbing' : (zoomDomain ? 'grab' : 'crosshair'),
-                userSelect: 'none'
-              }}
-          >
-            <div className="flex justify-end items-center mb-4 flex-wrap gap-4">
-              {/* Todos los controles (derecha) */}
+          <div className="flex-1 min-w-0 relative">
+            {/* Botones de líneas */}
+            <div className="flex justify-center items-center mb-4">
               <div className="flex gap-4">
-                {/* Botones de líneas */}
                 <button
                   onClick={() => toggleLineVisibility('speed')}
                   className={`flex items-center gap-2 ${
@@ -500,60 +488,82 @@ export function LineChart({ results }: LineChartProps) {
                   }`}></div>
                   Estado
                 </button>
+              </div>
+            </div>
 
-
-                {/* Botones de zoom */}
+            {/* Botones de zoom en esquina superior derecha */}
+            <div className="absolute top-[50px] right-[30px] z-10">
+              <div className="flex gap-2">
                 <button
                   onClick={() => handleZoom(true)}
-                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
+                  className="px-3 py-1 text-sm relative group"
                   style={{
-                    backgroundColor: '#2C2C2C',
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
                     color: '#9CA3AF'
                   }}
                 >
                   🔍+
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-60 transition-opacity duration-200"></div>
                 </button>
 
                 <button
                   onClick={() => handleZoom(false)}
-                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
+                  className="px-3 py-1 text-sm relative group"
                   style={{
-                    backgroundColor: '#2C2C2C',
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
                     color: '#9CA3AF'
                   }}
                 >
                   🔍-
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-60 transition-opacity duration-200"></div>
                 </button>
 
                 <button
                   onClick={resetZoom}
-                  className="px-3 py-1 text-sm rounded-lg hover:bg-gray-600"
+                  className="px-3 py-1 text-sm relative"
                   style={{
-                    backgroundColor: '#2C2C2C',
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
                     color: '#9CA3AF'
                   }}
                 >
                   ↻
+                  {zoomDomain && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-white to-transparent opacity-60"></div>
+                  )}
                 </button>
               </div>
             </div>
 
-            <ResponsiveContainer width="100%" height={620}>
-                <RechartsLineChart
-                  data={visibleData}
-                  margin={{
-                    top: 40,
-                    right: 30,
-                    left: 20,
-                    bottom: 40,
+            <div 
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{
+                cursor: isDragging ? 'grabbing' : (zoomDomain ? 'grab' : 'crosshair'),
+                userSelect: 'none'
+              }}
+            >
+              <ResponsiveContainer width="100%" height={620}>
+                  <RechartsLineChart
+                    data={visibleData}
+                    margin={{
+                      top: 40,
+                      right: 30,
+                      left: 20,
+                      bottom: 40,
+                    }}
+                  onMouseMove={(data) => {
+                    if (data && data.activePayload && data.activePayload.length > 0) {
+                      setHoveredData(data.activePayload[0].payload)
+                    }
                   }}
-                onMouseMove={(data) => {
-                  if (data && data.activePayload && data.activePayload.length > 0) {
-                    setHoveredData(data.activePayload[0].payload)
-                  }
-                }}
-                onMouseLeave={() => setHoveredData(null)}
-              >
+                  onMouseLeave={() => setHoveredData(null)}
+                >
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="#2C2C2C"
@@ -680,13 +690,14 @@ export function LineChart({ results }: LineChartProps) {
                   ))
                 })()}
                 </RechartsLineChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
 
           </div>
 
           <div className="lg:w-40 space-y-3">
             <div className="text-center mb-4">
-              <h3 className="text-lg font-bold text-white mb-2">Información de intervalos</h3>
+              <h3 className="text-lg font-bold text-white mb-2">Leyenda</h3>
               <div className="w-full h-px bg-gradient-to-r from-transparent via-gray-600 to-transparent"></div>
             </div>
             <div className="space-y-1">
