@@ -123,24 +123,6 @@ Todas las licencias completas se pueden encontrar en sus respectivos paquetes en
 
 **David**
 
-## 🤝 Contribuciones
-
-Las contribuciones son bienvenidas. Por favor:
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
 ## ⚠️ Estado del Proyecto
 
 Este proyecto está en fase de desarrollo activo. Algunas características pueden estar en pruebas o sujetas a cambios.
-
-## 📧 Contacto
-
-Para preguntas o sugerencias, por favor abre un issue en el repositorio.
-
----
-
-**Nota**: Este es un proyecto de análisis de datos de navegación marítima. Los datos procesados son confidenciales y no deben ser compartidos sin autorización.
