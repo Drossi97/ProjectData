@@ -24,6 +24,28 @@ export interface DataInterval {
   endPort?: PortAnalysis
 }
 
+export interface RawDataRow {
+  timestamp: string
+  date: string
+  time: string
+  latitude: number | null
+  longitude: number | null
+  speed: number | null
+  navStatus: string
+  closestPort?: PortAnalysis
+  [key: string]: any // Para incluir todas las demás columnas del CSV original
+}
+
+export interface RawDataResult {
+  success: boolean
+  data?: RawDataRow[]
+  error?: string
+  meta?: {
+    totalRows: number
+    filesProcessed: number
+  }
+}
+
 export interface CSVAnalysisResult {
   success: boolean
   data?: {
@@ -374,11 +396,153 @@ export function useCSVProcessor() {
     setResults(null)
   }
 
+  // Nueva función para obtener datos crudos línea por línea
+  const getRawDataAsJSON = async (
+    files: File[],
+    delimiter: string = ","
+  ): Promise<RawDataResult> => {
+    try {
+      const COL_LAT = "00-lathr [deg]"
+      const COL_LON = "01-lonhr [deg]"
+      const COL_SPEED = "04-speed [knots]"
+      const COL_NAVSTATUS = "06-navstatus [adim]"
+      const COL_TIME = "time"
+
+      // Port coordinates
+      const ports = [
+        { name: "Algeciras", lat: 36.128740148, lon: -5.439981128 },
+        { name: "Tanger Med", lat: 35.880312709, lon: -5.515627045 },
+        { name: "Ceuta", lat: 35.889, lon: -5.307 }
+      ]
+
+      // Function to calculate distance between two points (Haversine)
+      const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+        const R = 6371 // Earth radius in km
+        const dLat = (lat2 - lat1) * (Math.PI / 180)
+        const dLon = (lon2 - lon1) * (Math.PI / 180)
+        
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return Math.round(R * c * 100) / 100
+      }
+
+      // Function to find closest port
+      const findClosestPort = (lat: number | null, lon: number | null): PortAnalysis | undefined => {
+        if (lat === null || lon === null) return undefined
+        
+        const distances = ports.map(port => ({
+          name: port.name,
+          distance: calculateDistance(lat, lon, port.lat, port.lon)
+        }))
+        
+        distances.sort((a, b) => a.distance - b.distance)
+        return distances[0]
+      }
+
+      const csvTextToRows = (csvString: string) => {
+        if (!csvString || csvString.trim().length === 0) return []
+        const lines = csvString.replace(/\r\n?/g, "\n").trim().split("\n")
+        if (lines.length < 2) return []
+        const delim = delimiter === "\\t" || delimiter === "tab" ? "\t" : delimiter
+        const headers = lines[0].split(delim).map((h) => h.trim())
+        const hasNavstatusHeader = headers.some((h) => h.toLowerCase().includes("navstatus"))
+        const hasTimeHeader = headers.some((h) => h.trim() === COL_TIME)
+        if (!hasNavstatusHeader || !hasTimeHeader) return []
+
+        return lines.slice(1).map((line) => {
+          const values = line.split(delim).map((v) => v.trim())
+          const row: any = {}
+          headers.forEach((header, idx) => {
+            const key = header || `column_${idx}`
+            const value = values[idx]
+            row[key] = value === "" || value === undefined ? null : value
+          })
+          return row
+        })
+      }
+
+      // Read all files
+      const fileContents = await Promise.all(
+        files.map(async (file) => {
+          const text = await file.text()
+          return { name: file.name, content: text }
+        })
+      )
+
+      // Process all files
+      let combined: any[] = []
+      let filesProcessed = 0
+
+      for (const { content } of fileContents) {
+        const rows = csvTextToRows(content)
+        if (rows.length > 0) {
+          combined = combined.concat(rows)
+          filesProcessed++
+        }
+      }
+
+      if (combined.length === 0) {
+        return {
+          success: false,
+          error: "No se pudieron leer filas válidas de los archivos CSV"
+        }
+      }
+
+      // Transform to structured raw data
+      const rawData: RawDataRow[] = combined.map((row) => {
+        const timestamp = row[COL_TIME] || ""
+        const parts = timestamp.split(" ")
+        const date = parts[0] || ""
+        const time = parts[1] || ""
+        
+        const lat = row[COL_LAT] ? Number.parseFloat(row[COL_LAT]) : null
+        const lon = row[COL_LON] ? Number.parseFloat(row[COL_LON]) : null
+        const latitude = lat !== null && !Number.isNaN(lat) ? lat : null
+        const longitude = lon !== null && !Number.isNaN(lon) ? lon : null
+        
+        const spd = row[COL_SPEED] ? Number.parseFloat(row[COL_SPEED]) : null
+        const speed = spd !== null && !Number.isNaN(spd) && spd >= 0 ? spd : null
+        
+        const closestPort = findClosestPort(latitude, longitude)
+
+        return {
+          timestamp,
+          date,
+          time,
+          latitude,
+          longitude,
+          speed,
+          navStatus: row[COL_NAVSTATUS] || "",
+          closestPort,
+          ...row // Incluir todas las columnas originales
+        }
+      })
+
+      return {
+        success: true,
+        data: rawData,
+        meta: {
+          totalRows: rawData.length,
+          filesProcessed
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Error desconocido al procesar archivos"
+      }
+    }
+  }
+
   return {
     results,
     isProcessing,
     processFiles,
     clearResults,
     processCSVData, // Exposed for direct use if needed
+    getRawDataAsJSON, // Nueva función para obtener datos crudos
   }
 }

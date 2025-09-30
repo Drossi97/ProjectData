@@ -405,18 +405,18 @@ export function LineChart({ results }: LineChartProps) {
     }
   }
 
-  const formatTimeWithUnits = (timeString: string | undefined): string => {
+  const formatTimeOnly = (timeString: string | undefined): string => {
     if (!timeString || timeString === '--:--:--') return '--:--:--'
     if (typeof timeString !== 'string') return String(timeString || '--:--:--')
 
-    const parts = timeString.split(':').map(Number)
-    if (parts.length !== 3 || parts.some(isNaN)) return timeString
-
-    const hours = parts[0]
-    const minutes = parts[1]
-    const seconds = parts[2]
-
-    return `${hours}h ${minutes}m ${seconds}s`
+    const parts = timeString.split(':')
+    if (parts.length !== 3) return timeString
+    
+    const hours = parts[0].padStart(2, '0')
+    const minutes = parts[1].padStart(2, '0')
+    const seconds = Math.floor(parseFloat(parts[2])).toString().padStart(2, '0')
+    
+    return `${hours}:${minutes}:${seconds}`
   }
 
   const formatDate = (dateString: string | undefined): string => {
@@ -783,7 +783,7 @@ export function LineChart({ results }: LineChartProps) {
                 <div className="text-xs text-gray-400 leading-tight">Hora Inicial</div>
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-sm font-bold text-white font-mono text-center">
-                    {currentInterval?.startTime ? formatTimeWithUnits(currentInterval.startTime) : '--:--:--'}
+                    {currentInterval?.startTime ? formatTimeOnly(currentInterval.startTime) : '--:--:--'}
                   </div>
                 </div>
               </div>
@@ -796,7 +796,7 @@ export function LineChart({ results }: LineChartProps) {
                 <div className="text-xs text-gray-400 leading-tight">Hora Final</div>
                 <div className="flex-1 flex items-center justify-center">
                   <div className="text-sm font-bold text-white font-mono text-center">
-                    {currentInterval?.endTime ? formatTimeWithUnits(currentInterval.endTime) : '--:--:--'}
+                    {currentInterval?.endTime ? formatTimeOnly(currentInterval.endTime) : '--:--:--'}
                   </div>
                 </div>
               </div>
@@ -808,7 +808,7 @@ export function LineChart({ results }: LineChartProps) {
               >
                 <div className="text-xs text-gray-400 leading-tight">Fecha</div>
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="text-sm font-bold text-cyan-400 text-center">
+                  <div className="text-sm font-bold text-white text-center">
                     {hoveredData && !hoveredData.isGap ?
                       formatDate(hoveredData?.date || currentInterval?.startDate || '--') :
                       '--'

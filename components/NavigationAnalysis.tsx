@@ -96,9 +96,19 @@ export function NavigationAnalysis({ results }: NavigationAnalysisProps) {
     return `${day}/${month}/${year}`
   }, [])
 
-  // Función para extraer solo la hora
+  // Función para extraer y formatear la hora en formato HH:MM:SS (sin decimales)
   const formatTimeOnly = useCallback((dateTimeString: string): string => {
-    return dateTimeString.split(' ')[1]
+    const timeString = dateTimeString.split(' ')[1]
+    if (!timeString) return '--:--:--'
+    
+    const parts = timeString.split(':')
+    if (parts.length !== 3) return timeString
+    
+    const hours = parts[0].padStart(2, '0')
+    const minutes = parts[1].padStart(2, '0')
+    const seconds = Math.floor(parseFloat(parts[2])).toString().padStart(2, '0')
+    
+    return `${hours}:${minutes}:${seconds}`
   }, [])
 
   // Función para obtener el color basado en el tipo y puertos
